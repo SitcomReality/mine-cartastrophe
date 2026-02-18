@@ -1,4 +1,5 @@
 import { DeepMineBiome } from './DeepMine.js';
+import { CavernousAbyssBiome } from './CavernousAbyss.js';
 import { WORLD_SEED, CHUNK_LENGTH } from 'engine/constants.js';
 import { color, clamp, lerp } from 'engine/math.js';
 
@@ -9,6 +10,7 @@ export class BiomeManager {
     this.transitionLength = CHUNK_LENGTH * 3;
     
     this.registerBiome(new DeepMineBiome(seed));
+    this.registerBiome(new CavernousAbyssBiome(seed + 1));
     this.generateBiomeZones();
   }
   
@@ -17,10 +19,11 @@ export class BiomeManager {
   }
   
   generateBiomeZones() {
-    const zoneLength = CHUNK_LENGTH * 20;
+    const zoneLength = CHUNK_LENGTH * 15;
     this.zones = [
       { biomeId: 'deep_mine', startZ: 0, endZ: zoneLength },
-      // Expansion point for more biomes
+      { biomeId: 'cavernous_abyss', startZ: zoneLength, endZ: zoneLength * 2 },
+      { biomeId: 'deep_mine', startZ: zoneLength * 2, endZ: zoneLength * 3 },
     ];
   }
   
