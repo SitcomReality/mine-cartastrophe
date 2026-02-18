@@ -33,7 +33,8 @@ function updateHUD() {
 // Simulation Tick (Fixed Timestep)
 function onUpdate(dt, time) {
   tickWorld(world, dt);
-  camera.update(dt, world.distance, world.speed, time);
+  const currentBiome = biomeManager.getBiomeAt(world.distance).getConfig();
+  camera.update(dt, world.distance, world.speed, time, currentBiome);
   chunkManager.update(camera.position.z);
   world.biome = biomeManager.getCurrentConfig(camera.position.z);
 }

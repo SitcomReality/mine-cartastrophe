@@ -1,5 +1,6 @@
 import { vec3 } from './math.js';
 import { noise1D } from './noise.js';
+import { sampleTrack } from './track.js';
 import { DEFAULT_FOV, CAMERA_HEIGHT, CAMERA_SHAKE_INTENSITY, CAMERA_SHAKE_FREQUENCY } from './constants.js';
 
 export class Camera {
@@ -24,9 +25,11 @@ export class Camera {
     this.h = h;
   }
 
-  update(dt, trackZ, speed, time) {
+  update(dt, trackZ, speed, time, biome) {
+    const track = sampleTrack(trackZ, biome);
     this.targetPosition.z = trackZ;
-    this.targetPosition.y = this.height;
+    this.targetPosition.x = track.xOffset;
+    this.targetPosition.y = this.height + track.yOffset;
 
     const shake = this.shakeIntensity * (speed / 15);
     const sx = noise1D(time * this.shakeFrequency, 1) * shake;
