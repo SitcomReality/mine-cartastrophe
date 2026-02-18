@@ -13,9 +13,11 @@
     </header>
 
     <main class="center">
-      <!-- Placeholder canvas for later renderer -->
-      <canvas id="game-canvas" width="800" height="450"></canvas>
-      <p class="hint">Placeholder page — game assets will be wired here.</p>
+      <div class="canvas-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="hud-overlay" class="hud"></div>
+      </div>
+      <p class="hint">↑↓ adjust target speed • SPACE pause</p>
     </main>
   </div>
 
@@ -23,7 +25,8 @@
     {
       "imports": {
         "engine/": "./src/engine/",
-        "renderer/": "./src/renderer/"
+        "renderer/": "./src/renderer/",
+        "biomes/": "./src/biomes/"
       }
     }
   </script>

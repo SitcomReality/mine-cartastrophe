@@ -1,66 +1,65 @@
-/**
- * Placeholder entrypoint for Mine Cartastrophe.
- * Right now it only sets up the canvas and a minimal resize handler.
- */
+import { GameLoop } from 'engine/GameLoop.js';
+import { Camera } from 'engine/camera.js';
+import { Renderer } from 'renderer/core.js';
+import { ChunkManager } from 'engine/ChunkManager.js';
+import { BiomeManager } from 'biomes/BiomeManager.js';
+import { createWorldState, tickWorld } from 'engine/World.js';
+import { WORLD_SEED } from 'engine/constants.js';
 
 const canvas = document.getElementById('game-canvas');
-const ctx = canvas.getContext('2d');
+const hudElement = document.getElementById('hud-overlay');
 
-function resizeCanvasToDisplaySize() {
-  const rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(rect.height * dpr * 0.5625)); // keep 16:9-ish physical pixels
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  renderPlaceholder();
+// Initialize Systems
+const biomeManager = new BiomeManager(WORLD_SEED);
+const camera = new Camera();
+const renderer = new Renderer(canvas);
+const chunkManager = new ChunkManager(biomeManager);
+const world = createWorldState(biomeManager.getBiomeAt(0).getConfig());
+
+function updateHUD() {
+  const distKm = (world.distance / 1000).toFixed(2);
+  hudElement.innerHTML = `
+    <div class="hud-left">
+      <span class="biome-name">${world.biome.name}</span>
+      <span class="dist">${distKm} km</span>
+    </div>
+    <div class="hud-right">
+      <span class="speed">${world.speed.toFixed(1)} u/s</span>
+      <span class="fps">${loop.getFps()} fps</span>
+    </div>
+  `;
 }
 
-function renderPlaceholder() {
-  const w = canvas.width / (window.devicePixelRatio || 1);
-  const h = canvas.height / (window.devicePixelRatio || 1);
-
-  // simple vignette + centered text
-  ctx.clearRect(0, 0, w, h);
-
-  // background
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#0b0908');
-  g.addColorStop(1, '#030201');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-
-  // subtle center rectangle
-  ctx.fillStyle = 'rgba(255,255,255,0.02)';
-  const pad = Math.min(40, w * 0.06);
-  roundRect(ctx, pad, pad, w - pad * 2, h - pad * 2, 8);
-  ctx.fill();
-
-  // title text
-  ctx.fillStyle = '#d4620a';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `${Math.max(18, Math.floor(w * 0.05))}px "Courier New", monospace`;
-  ctx.fillText('Mine Cartastrophe', w / 2, h / 2 - 8);
-
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  ctx.font = '12px sans-serif';
-  ctx.fillText('Placeholder canvas — game will render here', w / 2, h / 2 + 24);
+// Simulation Tick (Fixed Timestep)
+function onUpdate(dt, time) {
+  tickWorld(world, dt);
+  camera.update(dt, world.distance, world.speed, time);
+  chunkManager.update(camera.position.z);
+  world.biome = biomeManager.getCurrentConfig(camera.position.z);
 }
 
-function roundRect(ctx, x, y, w, h, r) {
-  const min = Math.min(w, h) / 2;
-  r = Math.min(r, min);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+// Rendering Tick (Variable Rate)
+function onRender(interpolation) {
+  const chunks = chunkManager.getVisibleChunks();
+  renderer.render(camera, chunks, world.biome, performance.now() / 1000);
+  updateHUD();
 }
 
-window.addEventListener('resize', resizeCanvasToDisplaySize);
-resizeCanvasToDisplaySize();
+const loop = new GameLoop({ onUpdate, onRender });
 
-// set document title explicitly (redundant with HTML but nice for scripts)
-document.title = 'Mine Cartastrophe';
+// Input Handling
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowUp') world.targetSpeed = Math.min(world.targetSpeed + 5, 40);
+  if (e.key === 'ArrowDown') world.targetSpeed = Math.max(world.targetSpeed - 5, 5);
+  if (e.key === ' ') world.paused = !world.paused;
+});
+
+window.addEventListener('resize', () => {
+  renderer.resize();
+  camera.setScreenSize(renderer.w, renderer.h);
+});
+
+// Start
+renderer.resize();
+camera.setScreenSize(renderer.w, renderer.h);
+loop.start();

@@ -22,6 +22,7 @@ export const CAMERA_SHAKE_FREQUENCY = 12;
 export const BASE_SPEED = 15;
 export const MAX_SPEED = 40;
 export const MIN_SPEED = 5;
+export const ACCELERATION = 8;
 
 // Rendering
 export const NEAR_PLANE = 0.1;
