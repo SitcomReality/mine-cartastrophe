@@ -1,0 +1,144 @@
+import type { CameraState, Vec3 } from '@/types';
+import { 
+  DEFAULT_FOV, 
+  CAMERA_HEIGHT, 
+  CAMERA_SHAKE_INTENSITY,
+  CAMERA_SHAKE_FREQUENCY 
+} from '@/constants';
+import { vec3, noise1D } from '@/utils/math';
+
+export interface CameraConfig {
+  fov?: number;
+  height?: number;
+  shakeIntensity?: number;
+  shakeFrequency?: number;
+}
+
+/**
+ * First-person camera for the minecart
+ * Handles position, rotation, and track-following shake
+ */
+export class Camera {
+  private state: CameraState;
+  private config: Required<CameraConfig>;
+  
+  // Smooth camera movement
+  private targetPosition: Vec3;
+  private targetRotation: Vec3;
+  private smoothSpeed = 8;
+  
+  // Screen dimensions for projection
+  private screenWidth = 800;
+  private screenHeight = 600;
+  private aspectRatio = 800 / 600;
+  
+  constructor(config: CameraConfig = {}) {
+    this.config = {
+      fov: config.fov ?? DEFAULT_FOV,
+      height: config.height ?? CAMERA_HEIGHT,
+      shakeIntensity: config.shakeIntensity ?? CAMERA_SHAKE_INTENSITY,
+      shakeFrequency: config.shakeFrequency ?? CAMERA_SHAKE_FREQUENCY,
+    };
+    
+    this.state = {
+      position: vec3.create(0, this.config.height, 0),
+      rotation: vec3.create(0, 0, 0), // pitch, yaw, roll
+      fov: this.config.fov,
+      shake: 0,
+    };
+    
+    this.targetPosition = vec3.clone(this.state.position);
+    this.targetRotation = vec3.clone(this.state.rotation);
+  }
+  
+  setScreenSize(width: number, height: number): void {
+    this.screenWidth = width;
+    this.screenHeight = height;
+    this.aspectRatio = width / height;
+  }
+  
+  /**
+   * Update camera to follow the track
+   */
+  update(deltaTime: number, trackZ: number, speed: number, time: number): void {
+    // Update z position based on track progress
+    this.targetPosition.z = trackZ;
+    this.targetPosition.y = this.config.height;
+    
+    // Calculate shake based on speed and time
+    const shakeAmount = this.config.shakeIntensity * (speed / 15);
+    const shakeX = noise1D(time * this.config.shakeFrequency, 1) * shakeAmount;
+    const shakeY = noise1D(time * this.config.shakeFrequency, 2) * shakeAmount;
+    const shakeRoll = noise1D(time * this.config.shakeFrequency * 0.5, 3) * shakeAmount * 0.5;
+    
+    this.state.shake = shakeAmount;
+    
+    // Apply smooth interpolation
+    const t = 1 - Math.exp(-this.smoothSpeed * deltaTime);
+    
+    this.state.position = vec3.lerp(this.state.position, this.targetPosition, t);
+    this.state.rotation = vec3.lerp(this.state.rotation, this.targetRotation, t);
+    
+    // Add shake
+    this.state.position.x += shakeX;
+    this.state.position.y += shakeY;
+    this.state.rotation.z = shakeRoll;
+  }
+  
+  /**
+   * Project 3D point to 2D screen coordinates
+   * Returns null if point is behind camera
+   */
+  project(point: Vec3): { x: number; y: number; scale: number } | null {
+    // Transform point relative to camera
+    const relX = point.x - this.state.position.x;
+    const relY = point.y - this.state.position.y;
+    const relZ = point.z - this.state.position.z;
+    
+    // Don't render behind camera
+    if (relZ <= 0.1) return null;
+    
+    // Perspective projection
+    const fovRad = (this.state.fov * Math.PI) / 180;
+    const fovScale = 1 / Math.tan(fovRad / 2);
+    
+    const scale = fovScale / relZ;
+    
+    const screenX = this.screenWidth / 2 + (relX * scale * this.screenHeight / 2);
+    const screenY = this.screenHeight / 2 - (relY * scale * this.screenHeight / 2);
+    
+    return { x: screenX, y: screenY, scale };
+  }
+  
+  /**
+   * Get depth factor for fog calculations (0 = camera, 1 = far plane)
+   */
+  getDepthFactor(z: number, maxDistance: number): number {
+    const relZ = z - this.state.position.z;
+    return Math.max(0, Math.min(1, relZ / maxDistance));
+  }
+  
+  getPosition(): Vec3 {
+    return { ...this.state.position };
+  }
+  
+  getZ(): number {
+    return this.state.position.z;
+  }
+  
+  getState(): CameraState {
+    return { ...this.state };
+  }
+  
+  setTargetRotation(pitch: number, yaw: number, roll: number): void {
+    this.targetRotation = vec3.create(pitch, yaw, roll);
+  }
+  
+  getScreenDimensions(): { width: number; height: number; aspect: number } {
+    return {
+      width: this.screenWidth,
+      height: this.screenHeight,
+      aspect: this.aspectRatio,
+    };
+  }
+}

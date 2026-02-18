@@ -1,0 +1,166 @@
+import { useEffect, useRef, useCallback } from 'react';
+import { GameLoop } from '@/engine/GameLoop';
+import { Camera } from '@/engine/Camera';
+import { Renderer } from '@/engine/Renderer';
+import { ChunkManager } from '@/world/ChunkManager';
+import { BiomeManager } from '@/biomes/BiomeManager';
+import { BASE_SPEED } from '@/constants';
+import type { GameState, RenderStats } from '@/types';
+
+interface GameProps {
+  onStatsUpdate?: (stats: RenderStats & GameState) => void;
+}
+
+export function Game({ onStatsUpdate }: GameProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const gameRef = useRef<{
+    loop: GameLoop;
+    camera: Camera;
+    renderer: Renderer;
+    chunkManager: ChunkManager;
+    biomeManager: BiomeManager;
+    state: GameState;
+  } | null>(null);
+  
+  // Initialize game systems
+  const initGame = useCallback((canvas: HTMLCanvasElement) => {
+    // Create all game systems
+    const biomeManager = new BiomeManager();
+    const camera = new Camera();
+    const renderer = new Renderer(canvas);
+    const chunkManager = new ChunkManager(biomeManager);
+    
+    // Set camera screen size
+    const { width, height } = renderer.getSize();
+    camera.setScreenSize(width, height);
+    
+    // Initialize chunks
+    chunkManager.initialize(0);
+    
+    // Game state
+    const state: GameState = {
+      speed: BASE_SPEED,
+      distance: 0,
+      time: 0,
+      paused: false,
+      currentBiome: 'deep_mine',
+    };
+    
+    // Update function (fixed timestep)
+    const update = (deltaTime: number, time: number) => {
+      state.time = time;
+      
+      if (!state.paused) {
+        // Move forward
+        state.distance += state.speed * deltaTime;
+        
+        // Update camera position
+        camera.update(deltaTime, state.distance, state.speed, time);
+        
+        // Update chunk manager
+        chunkManager.update(camera.getZ());
+        
+        // Update current biome
+        state.currentBiome = biomeManager.getBiomeAt(camera.getZ()).getId();
+      }
+    };
+    
+    // Render function (variable rate)
+    const render = (_interpolation: number) => {
+      const cameraZ = camera.getZ();
+      const biomeConfig = biomeManager.getCurrentConfig(cameraZ);
+      const chunks = chunkManager.getVisibleChunks(cameraZ);
+      
+      renderer.render(camera, chunks, biomeConfig, state.time);
+      
+      // Report stats
+      if (onStatsUpdate) {
+        const renderStats = renderer.getStats();
+        const chunkStats = chunkManager.getStats();
+        
+        onStatsUpdate({
+          fps: loop.getFps(),
+          drawCalls: renderStats.drawCalls,
+          visibleChunks: chunkStats.activeChunks,
+          objectsRendered: renderStats.objectsRendered,
+          ...state,
+        });
+      }
+    };
+    
+    // Create game loop
+    const loop = new GameLoop({
+      onUpdate: update,
+      onRender: render,
+    });
+    
+    return {
+      loop,
+      camera,
+      renderer,
+      chunkManager,
+      biomeManager,
+      state,
+    };
+  }, [onStatsUpdate]);
+  
+  // Handle resize
+  const handleResize = useCallback(() => {
+    if (gameRef.current) {
+      const { renderer, camera } = gameRef.current;
+      renderer.resize();
+      const { width, height } = renderer.getSize();
+      camera.setScreenSize(width, height);
+    }
+  }, []);
+  
+  // Setup and cleanup
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // Initialize game
+    gameRef.current = initGame(canvas);
+    gameRef.current.loop.start();
+    
+    // Handle resize
+    window.addEventListener('resize', handleResize);
+    
+    // Cleanup
+    return () => {
+      gameRef.current?.loop.stop();
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [initGame, handleResize]);
+  
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!gameRef.current) return;
+      const { state } = gameRef.current;
+      
+      switch (e.key) {
+        case ' ':
+          state.paused = !state.paused;
+          break;
+        case 'ArrowUp':
+          state.speed = Math.min(state.speed + 5, 40);
+          break;
+        case 'ArrowDown':
+          state.speed = Math.max(state.speed - 5, 5);
+          break;
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+  
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full h-full block"
+      style={{ imageRendering: 'pixelated' }}
+    />
+  );
+}

@@ -1,0 +1,110 @@
+/**
+ * Mine Cartastrophe — App entry point.
+ *
+ * Responsibilities:
+ *  - Mount the full-screen canvas
+ *  - Instantiate WorldState, MineRenderer
+ *  - Drive the game loop via useGameLoop
+ *  - Handle resize
+ *  - Handle keyboard input for speed control
+ *  - Render the HUD overlay
+ */
+
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { useGameLoop } from './hooks/useGameLoop';
+import { MineRenderer } from './engine/renderer';
+import { createWorldState, tickWorld, MIN_SPEED, MAX_SPEED } from './engine/world';
+import type { WorldState } from './engine/world';
+import { coalMine } from './biomes/coalMine';
+import { HUD } from './components/HUD';
+
+const SPEED_STEP = 2;
+const FPS_SMOOTH = 0.1; // exponential smoothing factor
+
+export function App() {
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<MineRenderer | null>(null);
+  const worldRef    = useRef<WorldState>(createWorldState(coalMine));
+
+  // HUD state — updated ~4× per second to avoid flooding React
+  const [hudState, setHudState]   = useState<WorldState>({ ...worldRef.current });
+  const [fps, setFps]             = useState(60);
+  const fpsRef                    = useRef(60);
+  const hudTimerRef               = useRef(0);
+
+  // ── Renderer initialisation ──────────────────────────────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    rendererRef.current = new MineRenderer(canvas);
+
+    const handleResize = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      rendererRef.current?.resize(w, h);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ── Keyboard input ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const world = worldRef.current;
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        world.targetSpeed = Math.min(MAX_SPEED, world.targetSpeed + SPEED_STEP);
+      }
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        world.targetSpeed = Math.max(MIN_SPEED, world.targetSpeed - SPEED_STEP);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // ── Game loop ────────────────────────────────────────────────────────────
+  const tick = useCallback((timestamp: number) => {
+    const world    = worldRef.current;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+
+    const dt = tickWorld(world, timestamp);
+
+    // FPS smoothing
+    if (dt > 0) {
+      const instantFps = 1 / dt;
+      fpsRef.current = fpsRef.current * (1 - FPS_SMOOTH) + instantFps * FPS_SMOOTH;
+    }
+
+    renderer.render(world);
+
+    // Update HUD ~4× per second
+    hudTimerRef.current += dt;
+    if (hudTimerRef.current >= 0.25) {
+      hudTimerRef.current = 0;
+      setHudState({ ...world });
+      setFps(Math.round(fpsRef.current));
+    }
+  }, []);
+
+  useGameLoop(tick);
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  return (
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#000', position: 'relative' }}>
+      <canvas
+        ref={canvasRef}
+        style={{
+          display: 'block',
+          width: '100%',
+          height: '100%',
+          imageRendering: 'pixelated',
+        }}
+      />
+      <HUD state={hudState} fps={fps} />
+    </div>
+  );
+}

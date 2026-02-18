@@ -1,0 +1,178 @@
+import type { BiomeConfig, MineObject } from '@/types';
+import { BaseBiome } from './BaseBiome';
+import { TIE_SPACING } from '@/constants';
+
+/**
+ * Deep Mine Biome - The initial gloomy, ominous mine environment
+ * Dark stone walls with occasional lanterns and support beams
+ */
+const DEEP_MINE_CONFIG: BiomeConfig = {
+  id: 'deep_mine',
+  name: 'The Deep Mine',
+  
+  // Atmosphere - dark and oppressive
+  fogColor: { r: 12, g: 8, b: 15, a: 1 },
+  fogDensity: 0.04,
+  ambientLight: 0.15,
+  
+  // Tunnel
+  tunnelWidth: 7,
+  tunnelHeight: 5.5,
+  wallColor: { r: 38, g: 32, b: 28 },
+  floorColor: { r: 28, g: 24, b: 22 },
+  ceilingColor: { r: 25, g: 20, b: 18 },
+  
+  // Track
+  trackColor: { r: 55, g: 45, b: 35 },
+  railColor: { r: 95, g: 85, b: 75 },
+  
+  // Generation
+  supportBeamFrequency: 0.25,
+  lanternFrequency: 0.15,
+  decorationDensity: 0.4,
+  
+  // Object weights
+  objectWeights: {
+    support_beam: 1.0,
+    lantern: 0.6,
+    stalactite: 0.4,
+    rubble: 0.3,
+    chain: 0.2,
+    crate: 0.1,
+    barrel: 0.1,
+  },
+  
+  // Enclosed tunnel - all walls present
+  hasLeftWall: true,
+  hasRightWall: true,
+  hasCeiling: true,
+  hasFloor: true,
+  floorEdgeWidth: 7, // Full floor (same as tunnel width)
+  abyssDepth: 0,
+  abyssGlowIntensity: 0,
+};
+
+export class DeepMineBiome extends BaseBiome {
+  constructor(seed: number) {
+    super(DEEP_MINE_CONFIG, seed);
+  }
+  
+  generateObjects(zStart: number, zEnd: number, chunkId: number): MineObject[] {
+    const objects: MineObject[] = [];
+    let objectId = chunkId * 1000; // Unique ID base for this chunk
+    
+    // Reset RNG with chunk-based seed for deterministic generation
+    this.rng.setSeed(chunkId * 7919 + 12345);
+    
+    const chunkLength = zEnd - zStart;
+    const { tunnelWidth } = this.config;
+    
+    // Generate rail ties along the track
+    for (let z = zStart; z < zEnd; z += TIE_SPACING) {
+      objects.push({
+        id: objectId++,
+        type: 'rail_tie',
+        position: { x: 0, y: 0, z },
+        rotation: 0,
+        scale: 1,
+      });
+    }
+    
+    // Support beams at intervals
+    const beamInterval = chunkLength / 3;
+    for (let i = 0; i < 3; i++) {
+      const z = zStart + beamInterval * (i + 0.5);
+      
+      if (this.shouldSpawn(this.config.supportBeamFrequency * 2)) {
+        // Left beam
+        objects.push({
+          id: objectId++,
+          type: 'support_beam',
+          position: { x: -tunnelWidth / 2 + 0.3, y: 0, z },
+          rotation: 0,
+          scale: 1,
+        });
+        
+        // Right beam
+        objects.push({
+          id: objectId++,
+          type: 'support_beam',
+          position: { x: tunnelWidth / 2 - 0.3, y: 0, z },
+          rotation: Math.PI,
+          scale: 1,
+        });
+      }
+    }
+    
+    // Lanterns (light sources)
+    const lanternInterval = chunkLength / 2;
+    for (let i = 0; i < 2; i++) {
+      if (this.shouldSpawn(this.config.lanternFrequency * 2)) {
+        const z = zStart + lanternInterval * (i + 0.5);
+        const side = this.rng.chance(0.5) ? -1 : 1;
+        
+        objects.push({
+          id: objectId++,
+          type: 'lantern',
+          position: { 
+            x: side * (tunnelWidth / 2 - 0.8), 
+            y: 2.5, 
+            z 
+          },
+          rotation: 0,
+          scale: 0.8 + this.rng.next() * 0.4,
+        });
+      }
+    }
+    
+    // Stalactites on ceiling
+    const stalactiteCount = Math.floor(this.rng.next() * 4 * this.config.decorationDensity);
+    for (let i = 0; i < stalactiteCount; i++) {
+      objects.push({
+        id: objectId++,
+        type: 'stalactite',
+        position: {
+          x: this.rng.range(-tunnelWidth / 2 + 1, tunnelWidth / 2 - 1),
+          y: this.config.tunnelHeight - 0.2,
+          z: zStart + this.rng.next() * chunkLength,
+        },
+        rotation: this.rng.next() * Math.PI * 2,
+        scale: 0.5 + this.rng.next() * 1.0,
+      });
+    }
+    
+    // Random rubble/decorations
+    const rubbleCount = Math.floor(this.rng.next() * 3 * this.config.decorationDensity);
+    for (let i = 0; i < rubbleCount; i++) {
+      const side = this.rng.chance(0.5) ? -1 : 1;
+      objects.push({
+        id: objectId++,
+        type: 'rubble',
+        position: {
+          x: side * (tunnelWidth / 2 - 0.5 - this.rng.next() * 1),
+          y: 0,
+          z: zStart + this.rng.next() * chunkLength,
+        },
+        rotation: this.rng.next() * Math.PI * 2,
+        scale: 0.3 + this.rng.next() * 0.7,
+      });
+    }
+    
+    // Occasional chains hanging from ceiling
+    if (this.shouldSpawn(0.2)) {
+      objects.push({
+        id: objectId++,
+        type: 'chain',
+        position: {
+          x: this.rng.range(-1, 1),
+          y: this.config.tunnelHeight,
+          z: zStart + this.rng.next() * chunkLength,
+        },
+        rotation: 0,
+        scale: 0.8 + this.rng.next() * 0.5,
+      });
+    }
+    
+    return objects;
+  }
+}

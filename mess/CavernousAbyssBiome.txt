@@ -1,0 +1,228 @@
+import type { BiomeConfig, MineObject } from '@/types';
+import { BaseBiome } from './BaseBiome';
+import { TIE_SPACING } from '@/constants';
+
+/**
+ * Cavernous Abyss Biome - Open cavern with bottomless pit
+ * Track runs along a narrow ledge with a vast void to one or both sides
+ */
+const CAVERNOUS_ABYSS_CONFIG: BiomeConfig = {
+  id: 'cavernous_abyss',
+  name: 'The Cavernous Abyss',
+  
+  // Atmosphere - even darker, more void-like
+  fogColor: { r: 5, g: 3, b: 8, a: 1 },
+  fogDensity: 0.025, // Lower density - can see further in open space
+  ambientLight: 0.08, // Darker ambient
+  
+  // Cavern dimensions - much wider/taller than regular tunnel
+  tunnelWidth: 25, // Wide cavern
+  tunnelHeight: 15, // Tall ceiling (or no ceiling)
+  wallColor: { r: 25, g: 20, b: 22 },
+  floorColor: { r: 35, g: 28, b: 25 }, // Ledge color - slightly warmer
+  ceilingColor: { r: 15, g: 12, b: 14 }, // Barely visible ceiling
+  
+  // Track
+  trackColor: { r: 50, g: 40, b: 32 },
+  railColor: { r: 85, g: 75, b: 65 },
+  
+  // Generation - sparser, more dramatic
+  supportBeamFrequency: 0.1, // Fewer supports
+  lanternFrequency: 0.08, // Rare lights - adds to the ominous feel
+  decorationDensity: 0.2,
+  
+  // Object weights - different distribution
+  objectWeights: {
+    lantern: 0.4,
+    stalactite: 0.8, // More stalactites in cavern
+    rubble: 0.2,
+    chain: 0.4, // More chains
+    support_beam: 0.3,
+  },
+  
+  // Abyss properties - this is the key difference!
+  hasLeftWall: false, // Open to the void on left
+  hasRightWall: true, // Wall on right (can vary)
+  hasCeiling: true, // Distant ceiling
+  hasFloor: false, // No floor - we're on a ledge!
+  floorEdgeWidth: 2.5, // Narrow ledge/bridge width
+  abyssDepth: 100, // Deep void
+  abyssGlowColor: { r: 40, g: 20, b: 60 }, // Faint purple/void glow
+  abyssGlowIntensity: 0.15,
+};
+
+export class CavernousAbyssBiome extends BaseBiome {
+  // Track which side the abyss is on (can change along the journey)
+  private abyssSide: 'left' | 'right' | 'both' = 'left';
+  
+  constructor(seed: number) {
+    super(CAVERNOUS_ABYSS_CONFIG, seed);
+  }
+  
+  /**
+   * Get config with dynamic wall state based on position
+   * This allows the abyss side to change throughout the biome
+   */
+  getConfigForPosition(z: number): BiomeConfig {
+    // Determine abyss side based on position (creates variation)
+    const segment = Math.floor(z / 80); // Change every ~80 units
+    const segmentSeed = (segment * 13) % 7;
+    
+    // Occasionally switch sides or go to both
+    if (segmentSeed < 3) {
+      this.abyssSide = 'left';
+    } else if (segmentSeed < 5) {
+      this.abyssSide = 'right';
+    } else {
+      this.abyssSide = 'both';
+    }
+    
+    return {
+      ...this.config,
+      hasLeftWall: this.abyssSide !== 'left' && this.abyssSide !== 'both',
+      hasRightWall: this.abyssSide !== 'right' && this.abyssSide !== 'both',
+    };
+  }
+  
+  /**
+   * Get the current abyss side configuration
+   */
+  getAbyssSide(z: number): 'left' | 'right' | 'both' {
+    const segment = Math.floor(z / 80);
+    const segmentSeed = (segment * 13) % 7;
+    
+    if (segmentSeed < 3) return 'left';
+    if (segmentSeed < 5) return 'right';
+    return 'both';
+  }
+  
+  generateObjects(zStart: number, zEnd: number, chunkId: number): MineObject[] {
+    const objects: MineObject[] = [];
+    let objectId = chunkId * 1000;
+    
+    this.rng.setSeed(chunkId * 7919 + 54321);
+    
+    const chunkLength = zEnd - zStart;
+    const abyssSide = this.getAbyssSide(zStart);
+    const ledgeWidth = this.config.floorEdgeWidth;
+    
+    // Rail ties - essential for the track
+    for (let z = zStart; z < zEnd; z += TIE_SPACING) {
+      objects.push({
+        id: objectId++,
+        type: 'rail_tie',
+        position: { x: 0, y: 0, z },
+        rotation: 0,
+        scale: 1,
+      });
+    }
+    
+    // Support structures along the ledge edge
+    // These help define the ledge visually
+    const hasLeftEdge = abyssSide === 'left' || abyssSide === 'both';
+    const hasRightEdge = abyssSide === 'right' || abyssSide === 'both';
+    
+    // Occasional support beams on the wall side(s)
+    if (!hasRightEdge && this.shouldSpawn(this.config.supportBeamFrequency)) {
+      const z = zStart + chunkLength * 0.5;
+      objects.push({
+        id: objectId++,
+        type: 'support_beam',
+        position: { x: this.config.tunnelWidth / 2 - 0.5, y: 0, z },
+        rotation: 0,
+        scale: 1.2,
+      });
+    }
+    
+    if (!hasLeftEdge && this.shouldSpawn(this.config.supportBeamFrequency)) {
+      const z = zStart + chunkLength * 0.3;
+      objects.push({
+        id: objectId++,
+        type: 'support_beam',
+        position: { x: -this.config.tunnelWidth / 2 + 0.5, y: 0, z },
+        rotation: 0,
+        scale: 1.2,
+      });
+    }
+    
+    // Lanterns - rare and precious light sources
+    if (this.shouldSpawn(this.config.lanternFrequency * 1.5)) {
+      // Place lantern on ledge or wall side
+      let x = 0;
+      if (!hasLeftEdge) {
+        x = -ledgeWidth / 2 + 0.3;
+      } else if (!hasRightEdge) {
+        x = ledgeWidth / 2 - 0.3;
+      }
+      
+      objects.push({
+        id: objectId++,
+        type: 'lantern',
+        position: { 
+          x, 
+          y: 1.8, 
+          z: zStart + this.rng.next() * chunkLength
+        },
+        rotation: 0,
+        scale: 0.9 + this.rng.next() * 0.3,
+      });
+    }
+    
+    // Stalactites from the distant ceiling
+    const stalactiteCount = Math.floor(this.rng.next() * 5 * this.config.decorationDensity);
+    for (let i = 0; i < stalactiteCount; i++) {
+      // Stalactites can be anywhere in the cavern space
+      const xRange = this.config.tunnelWidth / 2;
+      objects.push({
+        id: objectId++,
+        type: 'stalactite',
+        position: {
+          x: this.rng.range(-xRange + 2, xRange - 2),
+          y: this.config.tunnelHeight - 0.5 - this.rng.next() * 2,
+          z: zStart + this.rng.next() * chunkLength,
+        },
+        rotation: this.rng.next() * Math.PI * 2,
+        scale: 0.8 + this.rng.next() * 1.5, // Larger stalactites in cavern
+      });
+    }
+    
+    // Chains hanging over the void - eerie and atmospheric
+    if (this.shouldSpawn(0.35)) {
+      const chainX = hasLeftEdge 
+        ? -ledgeWidth / 2 - this.rng.range(0.5, 2)
+        : hasRightEdge 
+          ? ledgeWidth / 2 + this.rng.range(0.5, 2)
+          : this.rng.range(-2, 2);
+          
+      objects.push({
+        id: objectId++,
+        type: 'chain',
+        position: {
+          x: chainX,
+          y: this.config.tunnelHeight,
+          z: zStart + this.rng.next() * chunkLength,
+        },
+        rotation: 0,
+        scale: 1.5 + this.rng.next() * 2, // Longer chains
+      });
+    }
+    
+    // Rubble only on the ledge, near the track
+    const rubbleCount = Math.floor(this.rng.next() * 2 * this.config.decorationDensity);
+    for (let i = 0; i < rubbleCount; i++) {
+      objects.push({
+        id: objectId++,
+        type: 'rubble',
+        position: {
+          x: this.rng.range(-ledgeWidth / 2 + 0.5, ledgeWidth / 2 - 0.5),
+          y: 0,
+          z: zStart + this.rng.next() * chunkLength,
+        },
+        rotation: this.rng.next() * Math.PI * 2,
+        scale: 0.2 + this.rng.next() * 0.4, // Smaller rubble
+      });
+    }
+    
+    return objects;
+  }
+}

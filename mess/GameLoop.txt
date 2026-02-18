@@ -1,0 +1,103 @@
+import { TARGET_FPS } from '@/constants';
+
+export type UpdateCallback = (deltaTime: number, time: number) => void;
+export type RenderCallback = (interpolation: number) => void;
+
+interface GameLoopOptions {
+  onUpdate: UpdateCallback;
+  onRender: RenderCallback;
+  targetFps?: number;
+}
+
+/**
+ * High-performance game loop with fixed timestep updates
+ * and variable render rate for smooth visuals on any device
+ */
+export class GameLoop {
+  private onUpdate: UpdateCallback;
+  private onRender: RenderCallback;
+  private targetFps: number;
+  private frameTime: number;
+  
+  private isRunning = false;
+  private animationFrameId: number | null = null;
+  private lastTime = 0;
+  private accumulator = 0;
+  private time = 0;
+  
+  // Performance tracking
+  private frameCount = 0;
+  private fpsTime = 0;
+  private currentFps = 0;
+  
+  constructor(options: GameLoopOptions) {
+    this.onUpdate = options.onUpdate;
+    this.onRender = options.onRender;
+    this.targetFps = options.targetFps ?? TARGET_FPS;
+    this.frameTime = 1000 / this.targetFps;
+  }
+  
+  start(): void {
+    if (this.isRunning) return;
+    
+    this.isRunning = true;
+    this.lastTime = performance.now();
+    this.accumulator = 0;
+    this.fpsTime = this.lastTime;
+    this.frameCount = 0;
+    
+    this.loop(this.lastTime);
+  }
+  
+  stop(): void {
+    this.isRunning = false;
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+  }
+  
+  private loop = (currentTime: number): void => {
+    if (!this.isRunning) return;
+    
+    this.animationFrameId = requestAnimationFrame(this.loop);
+    
+    // Calculate delta time with cap to prevent spiral of death
+    let deltaTime = currentTime - this.lastTime;
+    if (deltaTime > 250) deltaTime = 250; // Cap at 250ms
+    
+    this.lastTime = currentTime;
+    this.accumulator += deltaTime;
+    
+    // Fixed timestep updates
+    while (this.accumulator >= this.frameTime) {
+      this.onUpdate(this.frameTime / 1000, this.time / 1000);
+      this.time += this.frameTime;
+      this.accumulator -= this.frameTime;
+    }
+    
+    // Render with interpolation for smooth motion
+    const interpolation = this.accumulator / this.frameTime;
+    this.onRender(interpolation);
+    
+    // FPS calculation
+    this.frameCount++;
+    if (currentTime - this.fpsTime >= 1000) {
+      this.currentFps = this.frameCount;
+      this.frameCount = 0;
+      this.fpsTime = currentTime;
+    }
+  };
+  
+  getFps(): number {
+    return this.currentFps;
+  }
+  
+  getTime(): number {
+    return this.time / 1000;
+  }
+  
+  isPaused(): boolean {
+    return !this.isRunning;
+  }
+}

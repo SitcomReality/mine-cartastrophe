@@ -1,0 +1,59 @@
+/**
+ * HUD — minimal heads-up display overlay.
+ * Rendered in React/DOM on top of the canvas.
+ * Kept intentionally sparse to preserve atmosphere.
+ */
+import React from 'react';
+import type { WorldState } from '../engine/world';
+
+interface HUDProps {
+  state: WorldState;
+  fps: number;
+}
+
+export const HUD: React.FC<HUDProps> = ({ state, fps }) => {
+  const distKm = (state.distance / 100).toFixed(2);
+
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none select-none"
+      style={{ fontFamily: "'Courier New', Courier, monospace" }}
+    >
+      {/* Top-left: biome & depth */}
+      <div className="absolute top-4 left-5 text-xs leading-5 opacity-60">
+        <div style={{ color: '#d4620a', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+          {state.biome.name}
+        </div>
+        <div style={{ color: '#7a5c3a' }}>
+          {distKm} km
+        </div>
+      </div>
+
+      {/* Top-right: speed & fps */}
+      <div className="absolute top-4 right-5 text-right text-xs leading-5 opacity-50">
+        <div style={{ color: '#7a5c3a' }}>
+          {state.speed.toFixed(1)} u/s
+        </div>
+        <div style={{ color: '#4a3a28' }}>
+          {fps} fps
+        </div>
+      </div>
+
+      {/* Bottom-center: subtle title */}
+      <div
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 text-center opacity-20"
+        style={{ color: '#d4620a', letterSpacing: '0.35em', fontSize: '0.6rem', textTransform: 'uppercase' }}
+      >
+        Mine Cartastrophe
+      </div>
+
+      {/* Speed control hint */}
+      <div
+        className="absolute bottom-5 right-5 text-right text-xs opacity-25"
+        style={{ color: '#7a5c3a', fontSize: '0.6rem', letterSpacing: '0.08em' }}
+      >
+        ↑↓ speed
+      </div>
+    </div>
+  );
+};
