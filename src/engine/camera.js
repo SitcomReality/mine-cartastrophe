@@ -1,4 +1,5 @@
-import { vec3, noise1D } from './math.js';
+import { vec3 } from './math.js';
+import { noise1D } from './noise.js';
 import { DEFAULT_FOV, CAMERA_HEIGHT, CAMERA_SHAKE_INTENSITY, CAMERA_SHAKE_FREQUENCY } from './constants.js';
 
 export class Camera {
