@@ -28,18 +28,26 @@ export class TunnelLayer {
     const w = biome.tunnelWidth / 2;
     const h = biome.tunnelHeight;
     
+    const yaw1 = Math.atan2(t1.dX, 1);
+    const cos1 = Math.cos(yaw1);
+    const sin1 = Math.sin(yaw1);
+
+    const yaw2 = Math.atan2(t2.dX, 1);
+    const cos2 = Math.cos(yaw2);
+    const sin2 = Math.sin(yaw2);
+
     const corners1 = [
-      { x: t1.xOffset - w, y: t1.yOffset, z: z1 }, // BL
-      { x: t1.xOffset + w, y: t1.yOffset, z: z1 }, // BR
-      { x: t1.xOffset + w, y: t1.yOffset + h, z: z1 }, // TR
-      { x: t1.xOffset - w, y: t1.yOffset + h, z: z1 }  // TL
+      { x: t1.xOffset - w * cos1, y: t1.yOffset, z: z1 + w * sin1 },
+      { x: t1.xOffset + w * cos1, y: t1.yOffset, z: z1 - w * sin1 },
+      { x: t1.xOffset + w * cos1, y: t1.yOffset + h, z: z1 - w * sin1 },
+      { x: t1.xOffset - w * cos1, y: t1.yOffset + h, z: z1 + w * sin1 }
     ];
 
     const corners2 = [
-      { x: t2.xOffset - w, y: t2.yOffset, z: z2 },
-      { x: t2.xOffset + w, y: t2.yOffset, z: z2 },
-      { x: t2.xOffset + w, y: t2.yOffset + h, z: z2 },
-      { x: t2.xOffset - w, y: t2.yOffset + h, z: z2 }
+      { x: t2.xOffset - w * cos2, y: t2.yOffset, z: z2 + w * sin2 },
+      { x: t2.xOffset + w * cos2, y: t2.yOffset, z: z2 - w * sin2 },
+      { x: t2.xOffset + w * cos2, y: t2.yOffset + h, z: z2 - w * sin2 },
+      { x: t2.xOffset - w * cos2, y: t2.yOffset + h, z: z2 + w * sin2 }
     ];
 
     const p1 = corners1.map(c => camera.project(c));

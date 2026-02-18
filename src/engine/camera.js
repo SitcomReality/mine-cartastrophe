@@ -26,10 +26,19 @@ export class Camera {
   }
 
   update(dt, trackZ, speed, time, biome) {
+    const lookAhead = 2.0;
     const track = sampleTrack(trackZ, biome);
+    const trackNext = sampleTrack(trackZ + lookAhead, biome);
+
     this.targetPosition.z = trackZ;
     this.targetPosition.x = track.xOffset;
     this.targetPosition.y = this.height + track.yOffset;
+
+    // Calculate rotation to face forward along the track
+    const dx = trackNext.xOffset - track.xOffset;
+    const dy = trackNext.yOffset - track.yOffset;
+    this.targetRotation.y = Math.atan2(dx, lookAhead);
+    this.targetRotation.x = Math.atan2(-dy, lookAhead);
 
     const shake = this.shakeIntensity * (speed / 15);
     const sx = noise1D(time * this.shakeFrequency, 1) * shake;
@@ -42,23 +51,54 @@ export class Camera {
 
     this.position.x += sx;
     this.position.y += sy;
-    this.rotation.z = sr;
+    this.rotation.z += sr; // Add roll shake to current rotation
   }
 
   project(point) {
-    const rx = point.x - this.position.x;
-    const ry = point.y - this.position.y;
-    const rz = point.z - this.position.z;
+    // 1. Translate
+    let x = point.x - this.position.x;
+    let y = point.y - this.position.y;
+    let z = point.z - this.position.z;
 
-    if (rz <= 0.1) return null;
+    // 2. Rotate (Yaw - Y axis)
+    if (this.rotation.y !== 0) {
+      const cosY = Math.cos(-this.rotation.y);
+      const sinY = Math.sin(-this.rotation.y);
+      const nx = x * cosY - z * sinY;
+      const nz = x * sinY + z * cosY;
+      x = nx;
+      z = nz;
+    }
+
+    // 3. Rotate (Pitch - X axis)
+    if (this.rotation.x !== 0) {
+      const cosX = Math.cos(-this.rotation.x);
+      const sinX = Math.sin(-this.rotation.x);
+      const ny = y * cosX + z * sinX;
+      const nz = -y * sinX + z * cosX;
+      y = ny;
+      z = nz;
+    }
+    
+    // 4. Rotate (Roll - Z axis)
+    if (this.rotation.z !== 0) {
+      const cosZ = Math.cos(-this.rotation.z);
+      const sinZ = Math.sin(-this.rotation.z);
+      const nx = x * cosZ - y * sinZ;
+      const ny = x * sinZ + y * cosZ;
+      x = nx;
+      y = ny;
+    }
+
+    if (z <= 0.1) return null;
 
     const fovRad = (this.fov * Math.PI) / 180;
     const fovScale = 1 / Math.tan(fovRad / 2);
-    const scale = fovScale / rz;
+    const scale = fovScale / z;
 
     return {
-      x: this.w / 2 + (rx * scale * this.h / 2),
-      y: this.h / 2 - (ry * scale * this.h / 2),
+      x: this.w / 2 + (x * scale * (this.h / 2)),
+      y: this.h / 2 - (y * scale * (this.h / 2)),
       scale
     };
   }

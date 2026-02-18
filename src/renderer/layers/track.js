@@ -21,7 +21,7 @@ export class TrackLayer {
 
   renderRails(ctx) {
     const { canvasCtx, camera, biome } = ctx;
-    const segments = 20;
+    const segments = 60;
     const step = FAR_PLANE / segments;
     const railOffset = RAIL_SPACING / 2;
 
@@ -34,13 +34,21 @@ export class TrackLayer {
       for (let i = 0; i <= segments; i++) {
         const z = camera.position.z + i * step;
         const track = sampleTrack(z, biome);
+        
+        const yaw = Math.atan2(track.dX, 1);
+        const px = track.xOffset + Math.cos(yaw) * (railOffset * side);
+        const pz = z - Math.sin(yaw) * (railOffset * side);
+
         const p = camera.project({
-          x: track.xOffset + railOffset * side,
+          x: px,
           y: track.yOffset + 0.1,
-          z: z
+          z: pz
         });
         
-        if (!p) continue;
+        if (!p) {
+          if (!first) break;
+          continue;
+        }
         if (first) {
           canvasCtx.moveTo(p.x, p.y);
           first = false;
@@ -54,15 +62,25 @@ export class TrackLayer {
 
   renderTie(ctx, obj) {
     const { canvasCtx, camera, biome } = ctx;
-    const { x, y, z } = obj.position;
+    const { z } = obj.position;
     const track = sampleTrack(z, biome);
     const w = RAIL_SPACING * 0.8;
     const d = 0.4; // thickness
     
-    const p1 = camera.project({ x: track.xOffset - w, y: track.yOffset, z: z });
-    const p2 = camera.project({ x: track.xOffset + w, y: track.yOffset, z: z });
-    const p3 = camera.project({ x: track.xOffset + w, y: track.yOffset, z: z + d });
-    const p4 = camera.project({ x: track.xOffset - w, y: track.yOffset, z: z + d });
+    const yaw = Math.atan2(track.dX, 1);
+    const cosY = Math.cos(yaw);
+    const sinY = Math.sin(yaw);
+
+    const getCorner = (dx, dz) => ({
+      x: track.xOffset + dx * cosY + dz * sinY,
+      y: track.yOffset,
+      z: z - dx * sinY + dz * cosY
+    });
+
+    const p1 = camera.project(getCorner(-w, 0));
+    const p2 = camera.project(getCorner(w, 0));
+    const p3 = camera.project(getCorner(w, d));
+    const p4 = camera.project(getCorner(-w, d));
 
     if (!p1 || !p2 || !p3 || !p4) return;
 
